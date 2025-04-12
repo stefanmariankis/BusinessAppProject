@@ -16,6 +16,11 @@ import {
 import { setupAuth } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint pentru verificarea stării aplicației
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   // Setup authentication and session
   setupAuth(app);
   
