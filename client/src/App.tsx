@@ -1,8 +1,7 @@
 import { Switch, Route } from "wouter";
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layouts/DashboardLayout";
-import Login from "@/pages/login";
+import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
 import Clients from "@/pages/clients";
 import Projects from "@/pages/projects";
@@ -14,149 +13,94 @@ import TimeTracker from "@/pages/time-tracker";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/use-auth";
+import { ProtectedRoute } from "@/lib/protected-route";
+
+// Componenta înlocuitoare pentru rutele protejate
+const DashboardRoute = ({ component: Component }: { component: React.ComponentType }) => {
+  return (
+    <DashboardLayout>
+      <Component />
+    </DashboardLayout>
+  );
+};
 
 function App() {
-  const { user, setUser, setIsLoading } = useAuth();
+  const { user } = useAuth();
   
-  // Skip the session check for now and go straight to the login screen
-  useEffect(() => {
-    // Set isLoading to false to show login screen
-    setIsLoading(false);
-    
-    // Set the language from the user preferences if available
+  // Setează limba în funcție de preferințele utilizatorului
+  useEffect(() => {    
     if (user?.language) {
       document.documentElement.lang = user.language;
     }
-  }, [user, setIsLoading]);
+  }, [user]);
 
   return (
     <Switch>
-      {/* Public routes */}
-      <Route path="/login">
-        {user ? <Dashboard /> : <Login />}
-      </Route>
+      {/* Rută publică pentru autentificare */}
+      <Route path="/auth" component={AuthPage} />
       
-      {/* Protected routes */}
-      <Route path="/">
-        {user ? (
-          <DashboardLayout>
-            <Dashboard />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      {/* Rute protejate */}
+      <ProtectedRoute 
+        path="/" 
+        component={() => <DashboardRoute component={Dashboard} />} 
+      />
       
-      <Route path="/dashboard">
-        {user ? (
-          <DashboardLayout>
-            <Dashboard />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/dashboard" 
+        component={() => <DashboardRoute component={Dashboard} />} 
+      />
       
-      <Route path="/clients">
-        {user ? (
-          <DashboardLayout>
-            <Clients />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/clients" 
+        component={() => <DashboardRoute component={Clients} />} 
+      />
       
-      <Route path="/projects">
-        {user ? (
-          <DashboardLayout>
-            <Projects />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/projects" 
+        component={() => <DashboardRoute component={Projects} />} 
+      />
       
-      <Route path="/tasks">
-        {user ? (
-          <DashboardLayout>
-            <Tasks />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/tasks" 
+        component={() => <DashboardRoute component={Tasks} />} 
+      />
       
-      <Route path="/invoices">
-        {user ? (
-          <DashboardLayout>
-            <Invoices />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/invoices" 
+        component={() => <DashboardRoute component={Invoices} />} 
+      />
       
-      <Route path="/contracts">
-        {user ? (
-          <DashboardLayout>
-            <Contracts />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/contracts" 
+        component={() => <DashboardRoute component={Contracts} />} 
+      />
       
-      <Route path="/calendar">
-        {user ? (
-          <DashboardLayout>
-            <Calendar />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/calendar" 
+        component={() => <DashboardRoute component={Calendar} />} 
+      />
       
-      <Route path="/time-tracker">
-        {user ? (
-          <DashboardLayout>
-            <TimeTracker />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/time-tracker" 
+        component={() => <DashboardRoute component={TimeTracker} />} 
+      />
       
-      <Route path="/reports">
-        {user ? (
-          <DashboardLayout>
-            <Reports />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/reports" 
+        component={() => <DashboardRoute component={Reports} />} 
+      />
       
-      <Route path="/settings">
-        {user ? (
-          <DashboardLayout>
-            <Settings />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
-      </Route>
+      <ProtectedRoute 
+        path="/settings" 
+        component={() => <DashboardRoute component={Settings} />} 
+      />
       
-      {/* Fallback route */}
+      {/* Ruta de fallback */}
       <Route>
-        {user ? (
-          <DashboardLayout>
-            <NotFound />
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
+        <DashboardLayout>
+          <NotFound />
+        </DashboardLayout>
       </Route>
     </Switch>
   );
