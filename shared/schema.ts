@@ -1,4 +1,5 @@
 import { pgTable, text, serial, integer, boolean, timestamp, doublePrecision, pgEnum } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -24,6 +25,17 @@ export const users = pgTable("users", {
   language: languageEnum("language").notNull().default("en"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+export const usersRelations = relations(users, ({ many }) => ({
+  clients: many(clients),
+  projects: many(projects),
+  tasks: many(tasks),
+  timeEntries: many(timeEntries),
+  invoices: many(invoices),
+  contracts: many(contracts),
+  events: many(events),
+  activities: many(activities),
+}));
 
 // Clients Table
 export const clients = pgTable("clients", {

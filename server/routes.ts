@@ -13,61 +13,12 @@ import {
   insertEventSchema, 
   insertActivitySchema
 } from "@shared/schema";
-import session from "express-session";
-import MemoryStore from "memorystore";
-import passport from "passport";
-import { Strategy as LocalStrategy } from "passport-local";
+import { setupAuth } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  const SessionStore = MemoryStore(session);
+  // Setup authentication and session
+  setupAuth(app);
   
-  // Configure session middleware
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'bizflow-secret-key',
-    resave: false,
-    saveUninitialized: false,
-    store: new SessionStore({
-      checkPeriod: 86400000 // prune expired entries every 24h
-    }),
-    cookie: {
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
-  }));
-
-  // Initialize passport
-  app.use(passport.initialize());
-  app.use(passport.session());
-
-  // Configure local strategy
-  passport.use(new LocalStrategy(async (username, password, done) => {
-    try {
-      const user = await storage.getUserByUsername(username);
-      if (!user) {
-        return done(null, false, { message: 'Incorrect username.' });
-      }
-      if (user.password !== password) { // In production, use proper password hashing
-        return done(null, false, { message: 'Incorrect password.' });
-      }
-      return done(null, user);
-    } catch (err) {
-      return done(err);
-    }
-  }));
-
-  passport.serializeUser((user: any, done) => {
-    done(null, user.id);
-  });
-
-  passport.deserializeUser(async (id: number, done) => {
-    try {
-      const user = await storage.getUser(id);
-      done(null, user);
-    } catch (err) {
-      done(err);
-    }
-  });
-
   // Auth middleware
   const isAuthenticated = (req: Request, res: Response, next: any) => {
     if (req.isAuthenticated()) {
@@ -75,25 +26,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     res.status(401).json({ message: 'Unauthorized' });
   };
-
-  // Auth routes
-  app.post('/api/auth/login', passport.authenticate('local'), (req, res) => {
-    res.json(req.user);
-  });
-
-  app.post('/api/auth/logout', (req, res) => {
-    req.logout(() => {
-      res.json({ success: true });
-    });
-  });
-
-  app.get('/api/auth/session', (req, res) => {
-    if (req.isAuthenticated()) {
-      res.json(req.user);
-    } else {
-      res.status(401).json({ message: 'Not authenticated' });
-    }
-  });
 
   // User routes
   app.get('/api/users', isAuthenticated, async (req, res) => {
