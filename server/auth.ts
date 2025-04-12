@@ -5,11 +5,13 @@ import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { User as SelectUser } from "@shared/schema";
+import { User } from "@shared/schema";
+import { pool } from "./db";
+import connectPg from "connect-pg-simple";
 
 declare global {
   namespace Express {
-    interface User extends SelectUser {}
+    interface User extends User {}
   }
 }
 
@@ -29,16 +31,23 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
+  // Configurare PostgreSQL session store
+  const PostgresStore = connectPg(session);
+  const sessionStore = new PostgresStore({
+    pool,
+    tableName: 'session', // Numele tabelului pentru sesiuni
+    createTableIfMissing: true // Creează tabelul dacă nu există
+  });
+
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || 'bizflow-secret-key-change-in-production',
+    secret: process.env.SESSION_SECRET || "aplicatie_bizflow_secretkey",
     resave: false,
     saveUninitialized: false,
-    store: storage.sessionStore,
+    store: sessionStore,
     cookie: {
-      maxAge: 1000 * 60 * 60 * 24, // 24 hours
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production'
-    }
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60 * 1000, // 1 zi
+    },
   };
 
   app.set("trust proxy", 1);
@@ -50,93 +59,120 @@ export function setupAuth(app: Express) {
     new LocalStrategy(async (username, password, done) => {
       try {
         const user = await storage.getUserByUsername(username);
-        if (!user || !(await comparePasswords(password, user.password))) {
-          return done(null, false);
-        } else {
-          return done(null, user);
+        if (!user) {
+          return done(null, false, { message: "Nume de utilizator sau parolă incorecte" });
         }
-      } catch (error) {
-        return done(error);
+        
+        const isMatch = await comparePasswords(password, user.password);
+        if (!isMatch) {
+          return done(null, false, { message: "Nume de utilizator sau parolă incorecte" });
+        }
+        
+        return done(null, user);
+      } catch (err) {
+        return done(err);
       }
     }),
   );
 
-  passport.serializeUser((user, done) => done(null, user.id));
+  passport.serializeUser((user, done) => {
+    done(null, user.id);
+  });
+
   passport.deserializeUser(async (id: number, done) => {
     try {
       const user = await storage.getUser(id);
       done(null, user);
-    } catch (error) {
-      done(error);
+    } catch (err) {
+      done(err);
     }
   });
 
-  app.post("/api/register", async (req, res, next) => {
+  // Rută pentru înregistrare
+  app.post("/api/register", async (req, res) => {
     try {
-      // Verifică dacă există deja un utilizator cu acest nume de utilizator sau email
-      const existingUsername = await storage.getUserByUsername(req.body.username);
-      if (existingUsername) {
-        return res.status(400).json({ error: 'Numele de utilizator există deja' });
+      // Verificăm dacă username-ul există deja
+      const existingUser = await storage.getUserByUsername(req.body.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Numele de utilizator există deja" });
       }
 
+      // Verificăm dacă email-ul există deja
       const existingEmail = await storage.getUserByEmail(req.body.email);
       if (existingEmail) {
-        return res.status(400).json({ error: 'Adresa de email există deja' });
+        return res.status(400).json({ message: "Adresa de email este deja folosită" });
       }
 
-      // Creează utilizatorul nou cu parola hașurată
+      // Hash-uim parola și creăm utilizatorul
+      const hashedPassword = await hashPassword(req.body.password);
+      
       const user = await storage.createUser({
         ...req.body,
-        password: await hashPassword(req.body.password),
-        role: req.body.role || 'user',
-        language: req.body.language || 'ro'
+        password: hashedPassword,
       });
 
-      // Autentifică utilizatorul nou
+      // Autentificăm noul utilizator
       req.login(user, (err) => {
-        if (err) return next(err);
-        // Exclude parola din răspuns
+        if (err) {
+          return res.status(500).json({ message: "Eroare la autentificare" });
+        }
+        
+        // Returnăm datele utilizatorului (fără parolă)
         const { password, ...userWithoutPassword } = user;
-        res.status(201).json(userWithoutPassword);
+        return res.status(201).json(userWithoutPassword);
       });
     } catch (error) {
-      next(error);
+      console.error("Eroare la înregistrare:", error);
+      return res.status(500).json({ message: "Eroare internă la server" });
     }
   });
 
+  // Rută pentru autentificare
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err, user, info) => {
-      if (err) return next(err);
-      if (!user) return res.status(401).json({ error: 'Autentificare eșuată' });
-      
+      if (err) {
+        return next(err);
+      }
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Autentificare eșuată" });
+      }
       req.login(user, (err) => {
-        if (err) return next(err);
-        // Exclude parola din răspuns
+        if (err) {
+          return next(err);
+        }
+        // Returnăm datele utilizatorului (fără parolă)
         const { password, ...userWithoutPassword } = user;
-        res.status(200).json(userWithoutPassword);
+        return res.json(userWithoutPassword);
       });
     })(req, res, next);
   });
 
-  app.post("/api/logout", (req, res, next) => {
+  // Rută pentru delogare
+  app.post("/api/logout", (req, res) => {
     req.logout((err) => {
-      if (err) return next(err);
-      res.sendStatus(200);
+      if (err) {
+        return res.status(500).json({ message: "Eroare la deconectare" });
+      }
+      res.status(200).json({ message: "Deconectat cu succes" });
     });
   });
 
+  // Rută pentru a verifica utilizatorul curent
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    // Exclude parola din răspuns
-    const { password, ...userWithoutPassword } = req.user as SelectUser;
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Neautentificat" });
+    }
+    
+    // Returnăm datele utilizatorului (fără parolă)
+    const { password, ...userWithoutPassword } = req.user as User;
     res.json(userWithoutPassword);
   });
 }
 
-// Middleware pentru a verifica autentificarea
+// Middleware pentru a verifica dacă utilizatorul este autentificat
 export function isAuthenticated(req: Express.Request, res: Express.Response, next: any) {
   if (req.isAuthenticated()) {
     return next();
   }
-  res.status(401).json({ error: 'Autentificare necesară' });
+  res.status(401).json({ message: "Trebuie să fiți autentificat" });
 }
