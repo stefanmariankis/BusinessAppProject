@@ -22,6 +22,7 @@ import {
 } from "@shared/schema";
 
 export interface IStorage {
+  sessionStore: any; // Session store for user authentication
   // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -117,6 +118,7 @@ export interface IStorage {
 }
 
 export class MemStorage implements IStorage {
+  sessionStore: any;
   private users: Map<number, User>;
   private clients: Map<number, Client>;
   private projects: Map<number, Project>;
@@ -140,6 +142,7 @@ export class MemStorage implements IStorage {
   private activityCurrentId: number;
 
   constructor() {
+    this.sessionStore = {};
     this.users = new Map();
     this.clients = new Map();
     this.projects = new Map();

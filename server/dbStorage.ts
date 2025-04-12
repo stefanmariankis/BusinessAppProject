@@ -21,7 +21,7 @@ import { IStorage } from './storage';
 const PostgresSessionStore = connectPg(session);
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: any; // Using 'any' type to avoid SessionStore type error
 
   constructor() {
     this.sessionStore = new PostgresSessionStore({ 
